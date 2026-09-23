@@ -1,0 +1,49 @@
+14750: function [end_call:call_JCEdTtShJz95qPXziLaKiJov] with arguments {}
+14751: 2026-09-19 14:31:51.085 | INFO     | __main__:end_call:1071 - end_call: tool invoked — calling result_callback
+14752: 2026-09-19 14:31:51.085 | INFO     | __main__:end_call:1073 - end_call: result_callback done — pushing EndWorkerFrame downstream
+14753: 2026-09-19 14:31:51.085 | INFO     | __main__:end_call:1075 - end_call: EndWorkerFrame pushed
+14754: 2026-09-19 14:31:51.092 | INFO     | __main__:process_frame:1058 - EndFrameTracer[pre-switcher] EndWorkerFrame direction=DOWNSTREAM 
+14758: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+14761: LLMAssistantAggregator#0 FunctionCallsStartedFrame: ['end_call:call_JCEdTtShJz95qPXziLaKiJov']
+14795: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+14804: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+14874: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+14895: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+14945: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+15557: 2026-09-19 14:31:57.191 | INFO     | __main__:process_frame:1058 - EndFrameTracer[post-switcher] EndWorkerFrame 
+15561: LLMAssistantAggregator#0 FunctionCallInProgressFrame: [end_call:call_JCEdTtShJz95qPXziLaKiJov]
+15563: LLMAssistantAggregator#0 FunctionCallResultFrame: [end_call:call_JCEdTtShJz95qPXziLaKiJov]
+15567: 2026-09-19 14:31:57.197 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1543 - PipelineWorker#0: received end worker frame 
+15568: downstream EndWorkerFrame#0(reason: None)
+15572: 2026-09-19 14:31:57.203 | INFO     | __main__:process_frame:1058 - EndFrameTracer[post-switcher] EndWorkerFrame direction=UPSTREAM 
+15576: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+15578: 2026-09-19 14:31:57.212 | INFO     | __main__:process_frame:1058 - EndFrameTracer[pre-switcher] EndWorkerFrame direction=UPSTREAM 
+15690: You should end the call (by calling the end_call function/tool immediately after saying your natural spoken closing line) in these 
+15693: "bye", "ok thank you") — say a warm closing line, then call end_call.
+15696: doesn't seem related to what I can help with, I'll end the call here. Thank you." (in Urdu), then call end_call.
+15697: - The issue requires human follow-up and you've already communicated that — after confirming next steps, close and call end_call.
+15700: Do NOT end the call while the caller still has an active, in-scope question you haven't addressed. Do NOT call end_call after every 
+15702: only then call the end_call function — never call it without first giving the caller a proper spoken closing.
+15772: {'name': 'end_call', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{"success": true}', 'tool_call_id': 
+15803: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+15875: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+15928: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+15946: 2026-09-19 14:31:57.952 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1453 - PipelineWorker#0: received end worker frame 
+15947: upstream EndWorkerFrame#1(reason: None)
+15952: 2026-09-19 14:31:57.959 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1219 - PipelineWorker#0: Closing. Waiting for 
+15953: EndFrame#0(reason: None) to reach the end of the pipeline...
+15970: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+15973: 2026-09-19 14:31:57.982 | DEBUG    | pipecat.services.speechmatics.stt:_disconnect:731 - SpeechmaticsSTTService#0 disconnecting 
+16003: DEBUG:aiortc.rtcsctptransport:RTCSctpTransport(server) - T3 cancel
+16096: 2026-09-19 14:31:58.951 | INFO     | __main__:process_frame:1058 - EndFrameTracer[pre-switcher] EndFrame direction=DOWNSTREAM 
+16098: 2026-09-19 14:31:58.956 | DEBUG    | pipecat.services.cartesia.tts:_disconnect_websocket:619 - CartesiaTTSService#1: Disconnecting 
+16100: 2026-09-19 14:31:58.957 | DEBUG    | pipecat.services.cartesia.tts:_disconnect_websocket:619 - CartesiaTTSService#0: Disconnecting 
+23731: DEBUG:aiortc.rtcrtpsender:RTCRtpSender(audio) - RTP finished
+23732: DEBUG:aiortc.rtcrtpreceiver:RTCRtpReceiver(audio) - RTCP finished
+23734: DEBUG:aiortc.rtcrtpsender:RTCRtpSender(audio) - RTCP finished
+23735: DEBUG:aiortc.rtcrtpreceiver:RTCRtpReceiver(video) - RTCP finished
+23736: DEBUG:aiortc.rtcrtpsender:RTCRtpSender(video) - RTP finished
+23738: DEBUG:aiortc.rtcrtpsender:RTCRtpSender(video) - RTCP finished
+23746: 2026-09-19 14:33:03.952 | INFO     | pipecat.transports.smallwebrtc.request_handler:handle_disconnected:212 - Discarding peer 
+23749: 2026-09-19 14:33:03.952 | INFO     | __main__:on_client_disconnected:1205 - Client disconnected
+23750: 2026-09-19 14:33:03.953 | DEBUG    | pipecat.pipeline.worker:_cancel:1119 - Cancelling pipeline worker PipelineWorker#0

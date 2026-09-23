@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BISP Helpline — Connect</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 480px;
+    margin: 4rem auto;
+    padding: 0 1.5rem;
+    text-align: center;
+  }
+  button {
+    display: block;
+    width: 100%;
+    padding: 1rem;
+    margin: 0.75rem 0;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #f5f5f5;
+    cursor: pointer;
+  }
+  button:hover { background: #e8e8e8; }
+  #status { color: #555; margin-top: 1rem; }
+  #call { display: none; }
+  #hangup { background: #fdecea; border-color: #f5c2c0; }
+</style>
+</head>
+<body>
+
+<h1>BISP Helpline</h1>
+
+<div id="picker">
+  <p>براہ کرم زبان منتخب کریں / Please choose your language</p>
+  <button id="btn-ur">اردو (Urdu)</button>
+  <button id="btn-en">English</button>
+</div>
+
+<div id="call">
+  <p id="status">Connecting…</p>
+  <audio id="remote-audio" autoplay></audio>
+  <button id="hangup">End Call</button>
+</div>
+
+<script>
+// This server URL assumes bot.py's dev runner is running on its default
+// port. Change if you run it elsewhere.
+const SERVER_URL = "http://localhost:7860";
+
+let pc = null;
+let localStream = null;
+
+function setStatus(text) {
+  document.getElementById("status").textContent = text;
+}
+
+async function connect(language) {
+  document.getElementById("picker").style.display = "none";
+  document.getElementById("call").style.display = "block";
+  setStatus("Requesting microphone…");
+
+  try {
+    // Explicit (not relying on browser defaults): echoCancellation is the
+    // browser's built-in AEC3 engine, which cancels the bot's own TTS output
+    // (played via the <audio> element below) out of the mic signal it
+    // captures. This is the real fix for acoustic echo, not a band-aid --
+    // it's the same mechanism every browser-based call already relies on.
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  } catch (e) {
+    setStatus(`Microphone access denied: ${e.message}`);
+    return;
+  }
+
+  pc = new RTCPeerConnection();
+  // addTrack alone creates one bidirectional (sendrecv) audio transceiver --
+  // send mic, receive the bot's speech. Do NOT also call addTransceiver()
+  // for audio; that adds a second, conflicting audio m-line and corrupts
+  // the negotiated stream (confirmed: it produced garbled STT transcripts).
+  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+  pc.ontrack = (event) => {
+    document.getElementById("remote-audio").srcObject = event.streams[0];
+  };
+
+  // RTVI control channel: the bot's on_client_ready handler (which kicks
+  // off the proactive greeting) only fires once it receives a "client-ready"
+  // message over a data channel. Must be created before the offer so it's
+  // included in the SDP.
+  const rtviChannel = pc.createDataChannel("rtvi");
+  rtviChannel.onopen = () => {
+    rtviChannel.send(
+      JSON.stringify({
+        label: "rtvi-ai",
+        type: "client-ready",
+        id: crypto.randomUUID(),
+        data: { version: "2.1.0" },
+      })
+    );
+  };
+  // Listen for RTVI messages from the bot. Pipecat sends "bot-disconnected"
+  // when the pipeline ends (e.g. after end_call). Calling hangup() here
+  // resets the UI immediately rather than leaving the user on a silent screen.
+  rtviChannel.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === "bot-disconnected") {
+      hangup();
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    // Guard: hangup() sets pc = null; pc.close() can trigger this handler
+    // one more time (with state "closed"), which would throw without this.
+    if (!pc) return;
+    if (pc.connectionState === "connected") {
+      setStatus(`Connected (${language === "ur" ? "اردو" : "English"})`);
+    } else if (pc.connectionState === "closed" || pc.connectionState === "failed") {
+      // WebRTC connection gone — treat as call ended and reset UI.
+      hangup();
+    } else if (pc.connectionState === "disconnected") {
+      // Transient ICE state; show a message but don't tear down yet.
+      setStatus("Connection interrupted…");
+    }
+  };
+
+  setStatus("Negotiating connection…");
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // Wait for ICE gathering to finish rather than trickling candidates via
+  // the PATCH endpoint -- simplest correct approach for local/demo use,
+  // where gathering (host candidates only) completes almost immediately.
+  await new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") return resolve();
+    const check = () => {
+      if (pc.iceGatheringState === "complete") {
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }
+    };
+    pc.addEventListener("icegatheringstatechange", check);
+  });
+
+  let response;
+  try {
+    response = await fetch(`${SERVER_URL}/api/offer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sdp: pc.localDescription.sdp,
+        type: pc.localDescription.type,
+        request_data: { language, department: "bisp" },
+      }),
+    });
+  } catch (e) {
+    setStatus(`Could not reach bot server at ${SERVER_URL}: ${e.message}`);
+    return;
+  }
+
+  if (!response.ok) {
+    setStatus(`Connection failed: HTTP ${response.status}`);
+    return;
+  }
+
+  const answer = await response.json();
+  await pc.setRemoteDescription({ sdp: answer.sdp, type: answer.type });
+}
+
+function hangup() {
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach((t) => t.stop());
+    localStream = null;
+  }
+  document.getElementById("call").style.display = "none";
+  document.getElementById("picker").style.display = "block";
+  setStatus("Connecting…");
+}
+
+document.getElementById("btn-ur").addEventListener("click", () => connect("ur"));
+document.getElementById("btn-en").addEventListener("click", () => connect("en"));
+document.getElementById("hangup").addEventListener("click", hangup);
+</script>
+
+</body>
+</html>

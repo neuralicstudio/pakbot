@@ -1,0 +1,228 @@
+/* =============================================================================
+   App.css — styles for the pre-connect department + language picker only.
+   ConsoleTemplate manages its own stylesheet via voice-ui-kit.
+   ============================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Geist Variable', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------------------
+   Picker screen
+   --------------------------------------------------------------------------- */
+
+.picker-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f3f1;
+  padding: 1.5rem;
+}
+
+.picker-card {
+  background: #ffffff;
+  border: 1px solid #dde0dd;
+  border-radius: 8px;
+  padding: 2.5rem 2rem 2rem;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.07);
+}
+
+.gov-badge {
+  display: inline-block;
+  background: #01411c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  padding: 4px 12px;
+  border-radius: 3px;
+  margin-bottom: 1.1rem;
+}
+
+.picker-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f1a0f;
+  margin: 0 0 0.3rem;
+  line-height: 1.3;
+}
+
+.picker-subtitle {
+  font-size: 0.83rem;
+  color: #5a6a5a;
+  margin: 0 0 1.4rem;
+  letter-spacing: 0.03em;
+}
+
+.picker-divider {
+  border: none;
+  border-top: 1px solid #e4e9e4;
+  margin: 0 0 1.4rem;
+}
+
+.picker-prompt {
+  font-size: 0.88rem;
+  color: #333;
+  margin: 0 0 1rem;
+}
+
+.dept-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.dept-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid #cdd0cd;
+  border-radius: 6px;
+  background: #fafbfa;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dept-btn:hover {
+  border-color: #01411c;
+  background: #f0f6f1;
+  box-shadow: 0 0 0 3px rgba(1, 65, 28, 0.08);
+}
+
+.dept-btn.selected {
+  border-color: #01411c;
+  background: #e8f3eb;
+  box-shadow: 0 0 0 3px rgba(1, 65, 28, 0.12);
+}
+
+.dept-primary {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f1a0f;
+}
+
+.dept-secondary {
+  font-size: 0.72rem;
+  color: #6a7a6a;
+}
+
+.lang-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.lang-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 1.2rem 0.75rem;
+  border: 1.5px solid #cdd0cd;
+  border-radius: 6px;
+  background: #fafbfa;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.lang-btn:hover {
+  border-color: #01411c;
+  background: #f0f6f1;
+  box-shadow: 0 0 0 3px rgba(1, 65, 28, 0.08);
+}
+
+.lang-btn.selected {
+  border-color: #01411c;
+  background: #e8f3eb;
+  box-shadow: 0 0 0 3px rgba(1, 65, 28, 0.12);
+}
+
+.lang-btn:active {
+  background: #e8f3eb;
+}
+
+.lang-primary {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f1a0f;
+}
+
+.lang-secondary {
+  font-size: 0.75rem;
+  color: #6a7a6a;
+}
+
+.picker-note {
+  font-size: 0.7rem;
+  color: #aaa;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+/* ---------------------------------------------------------------------------
+   Console logo — rendered inside voice-ui-kit's ConsoleTemplate header.
+   Colors inherit from the kit's own theme variables so it works in both
+   light and dark mode without hardcoding.
+   --------------------------------------------------------------------------- */
+
+.console-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.console-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.console-logo-name {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+
+.console-logo-sub {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  opacity: 0.45;
+}
+
+.console-logo-back {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  opacity: 0.5;
+  cursor: pointer;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+  transition: opacity 0.1s;
+}
+
+.console-logo-back:hover {
+  opacity: 0.9;
+}

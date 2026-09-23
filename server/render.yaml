@@ -1,0 +1,48 @@
+# Render deployment config for BISP Helpline voice agent.
+#
+# PLACEMENT: this file must live at the root of your Git repository.
+# If your repo root is the *parent* of this server/ directory, move this file
+# up one level and add:
+#   rootDir: server
+# to the service block below.
+#
+# TURN SERVER REQUIREMENT:
+# Render web services are HTTP-proxy-only — UDP traffic (WebRTC RTP/SRTP) is
+# not forwarded to your service. Callers who cannot reach your server via a
+# direct UDP path (almost everyone on Render) will silently get no audio.
+# You MUST provision a TURN server that supports TCP/TLS relay and set
+# PIPECAT_ICE_SERVERS to point at it. See:
+#   https://docs.pipecat.ai/guides/webrtc#ice-servers
+#
+# Recommended free TURN providers: Metered (metered.ca), Twilio Network
+# Traversal Service, or self-host coturn on a VPS.
+#
+# PIPECAT_ICE_SERVERS format (JSON array):
+#   [{"urls":"turn:your-turn-host:3478","username":"u","credential":"p"}]
+# or with TLS:
+#   [{"urls":"turns:your-turn-host:5349","username":"u","credential":"p"}]
+
+services:
+  - type: web
+    name: bisp-helpline
+    runtime: python
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run python bot.py --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SPEECHMATICS_API_KEY
+        sync: false
+      - key: FISH_AUDIO_API_KEY
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      # Optional: override the default Cartesia English voice ID
+      - key: CARTESIA_VOICE_ID
+        sync: false
+      # REQUIRED for WebRTC media relay through Render's HTTP-only proxy.
+      # Set to a JSON array of ICE server objects (TURN with TCP/TLS support).
+      # Without this, callers will connect but hear no audio.
+      - key: PIPECAT_ICE_SERVERS
+        sync: false

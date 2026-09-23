@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(python:*)",
+      "Bash(.venv/Scripts/python -c \"import pipecat, os; print\\(os.path.dirname\\(pipecat.__file__\\)\\)\")",
+      "Bash(npm show:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:voiceuikit.pipecat.ai)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.pipecat.ai)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:context7.com)",
+      "Bash(node:*)",
+      "Bash(cd:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command \"Get-Process -Id 17000 | Select-Object Name, Id, MainWindowTitle, Path\" 2>&1)",
+      "Bash(curl:*)",
+      "Bash(xargs -I{} taskkill /F /PID {})",
+      "Bash(cmd /c \"taskkill /F /PID 17000\")",
+      "Bash(cmd /c \"taskkill /F /PID 17000 2>&1\")",
+      "Bash(powershell -Command \"Stop-Process -Id 17000 -Force; Write-Host 'Killed'\")",
+      "Bash(uv run:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:status.speechmatics.com)",
+      "Bash(powershell -Command \"Get-Item 'C:\\\\Projects\\\\pak-gov-voice-agent-pipecat\\\\pipecat-quickstart\\\\server\\\\bot_run_err.log' | Select-Object Length, LastWriteTime\")"
+    ]
+  }
+}
