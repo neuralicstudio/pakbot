@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 // @ts-ignore – voice-ui-kit ships its own types; skipLibCheck in tsconfig handles the rest
 import { ConsoleTemplate, FullScreenContainer, ThemeProvider } from '@pipecat-ai/voice-ui-kit';
 
@@ -100,18 +100,25 @@ export default function App() {
     );
   }
 
+  // Stable reference — a new object identity on every render would trigger
+  // PipecatAppBase's useEffect to reconnect unnecessarily.
+  const connectParams = useMemo(
+    () => ({
+      webrtcRequestParams: {
+        endpoint: `${BOT_URL}/api/offer`,
+        requestData: { language, department },
+      },
+    }),
+    [language, department],
+  );
+
   return (
     <ThemeProvider defaultTheme="system" storageKey="pakbot-theme">
       <FullScreenContainer>
         <ConsoleTemplate
           key={`${department}-${language}`}
           transportType="smallwebrtc"
-          connectParams={{
-            webrtcRequestParams: {
-              endpoint: `${BOT_URL}/api/offer`,
-              requestData: { language, department },
-            },
-          }}
+          connectParams={connectParams}
           titleText={`${DEPARTMENTS[department].label} — Voice AI Console`}
           assistantLabelText="Agent"
           userLabelText="You"
