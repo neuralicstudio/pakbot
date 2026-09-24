@@ -182,6 +182,46 @@ def _is_connected_with_pc_fallback(self) -> bool:
 SmallWebRTCConnection.is_connected = _is_connected_with_pc_fallback
 # ── End fix ─────────────────────────────────────────────────────────────────
 
+# ── Exception-logging patch ──────────────────────────────────────────────────
+# SmallWebRTCRequestHandler.handle_web_request has two silent failure modes:
+#
+#   (a) Outer except logs logger.error(f"...: {e}") — message only, no traceback.
+#       Covers failures in pipecat_connection.initialize() / setRemoteDescription().
+#
+#   (b) Inner except around the bot() callback logs logger.error and does NOT
+#       re-raise.  A crash inside bot() during pipeline setup therefore returns a
+#       valid SDP answer (200 OK) to the browser, the pipeline never runs, and the
+#       frontend sits at "connecting" forever with a single unhelpful log line.
+#
+# Replace handle_web_request with a thin wrapper that uses logger.exception() so
+# the full traceback (file, line, cause) appears in Render / production logs.
+from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequestHandler
+
+_orig_handle_web_request = SmallWebRTCRequestHandler.handle_web_request
+
+
+async def _debug_handle_web_request(self, request, webrtc_connection_callback):
+    async def _traced_callback(connection):
+        try:
+            await webrtc_connection_callback(connection)
+        except Exception:
+            # Log with full traceback BEFORE the library's inner except swallows it.
+            logger.exception(
+                f"bot() raised an unhandled exception for peer {connection.pc_id}"
+            )
+            raise  # let the library's inner except see it too (it won't re-raise)
+
+    try:
+        return await _orig_handle_web_request(self, request, _traced_callback)
+    except Exception:
+        # Covers setRemoteDescription / createAnswer / get_answer failures.
+        logger.exception("handle_web_request failed")
+        raise
+
+
+SmallWebRTCRequestHandler.handle_web_request = _debug_handle_web_request
+# ── End exception-logging patch ──────────────────────────────────────────────
+
 # Fish Audio: Urdu voice, verified via live testing.
 FISH_MODEL = "s2.1-pro-free"
 FISH_URDU_VOICE_ID = "1a915c8fa83c43f49b2cf41f83319cb3"
