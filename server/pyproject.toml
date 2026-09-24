@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pipecat-ai[cartesia,fish,openai,runner,silero,speechmatics,webrtc]>=1.4.0",
     "pipecatcloud",
+    "aiortc==1.15.0",
+    "aioice==0.10.2",
 ]
 
 [dependency-groups]

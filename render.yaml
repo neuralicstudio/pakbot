@@ -1,11 +1,5 @@
 # Render deployment config for BISP Helpline voice agent.
 #
-# PLACEMENT: this file must live at the root of your Git repository.
-# If your repo root is the *parent* of this server/ directory, move this file
-# up one level and add:
-#   rootDir: server
-# to the service block below.
-#
 # TURN SERVER REQUIREMENT:
 # Render web services are HTTP-proxy-only — UDP traffic (WebRTC RTP/SRTP) is
 # not forwarded to your service. Callers who cannot reach your server via a
@@ -26,6 +20,7 @@ services:
   - type: web
     name: bisp-helpline
     runtime: python
+    rootDir: server
     buildCommand: pip install uv && uv sync --frozen --no-dev
     startCommand: uv run python bot.py --host 0.0.0.0 --port $PORT
     healthCheckPath: /health

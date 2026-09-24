@@ -2164,6 +2164,8 @@ name = "pipecat-quickstart"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aioice" },
+    { name = "aiortc" },
     { name = "pipecat-ai", extra = ["fish", "runner", "speechmatics", "webrtc"] },
     { name = "pipecatcloud" },
 ]
@@ -2176,6 +2178,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aioice", specifier = "==0.10.2" },
+    { name = "aiortc", specifier = "==1.15.0" },
     { name = "pipecat-ai", extras = ["cartesia", "fish", "openai", "runner", "silero", "speechmatics", "webrtc"], specifier = ">=1.4.0" },
     { name = "pipecatcloud" },
 ]
