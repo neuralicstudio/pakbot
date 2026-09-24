@@ -157,6 +157,23 @@ async def health():
     return JSONResponse({"status": "ok"})
 
 
+@_pipecat_app.get("/ice-servers")
+async def ice_servers():
+    """Return the configured ICE servers so the browser can use them too.
+
+    The Pipecat runner already feeds PIPECAT_ICE_SERVERS to the *server-side*
+    aiortc peer connection, but the browser's RTCPeerConnection also needs
+    them — without STUN/TURN the browser can only produce host candidates
+    (private IPs) which are unreachable from Render.
+    """
+    raw = os.environ.get("PIPECAT_ICE_SERVERS", "[]")
+    try:
+        servers = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        servers = []
+    return JSONResponse({"iceServers": servers})
+
+
 # ── SmallWebRTC race-condition fix ──────────────────────────────────────────
 # voice-ui-kit uses trickle ICE: the WebRTC connection establishes in ~100 ms
 # while the bot pipeline takes several seconds to start (Speechmatics WS,

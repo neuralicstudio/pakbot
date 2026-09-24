@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 // @ts-ignore – voice-ui-kit ships its own types; skipLibCheck in tsconfig handles the rest
 import { ConsoleTemplate, FullScreenContainer, ThemeProvider } from '@pipecat-ai/voice-ui-kit';
 
@@ -51,18 +51,33 @@ function LogoBadge({
 export default function App() {
   const [department, setDepartment] = useState<Department | null>(null);
   const [language, setLanguage] = useState<Language | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [iceServers, setIceServers] = useState<any[]>([]);
 
-  // Declared before any early return so hook call order is always the same.
-  // Stable reference prevents PipecatAppBase's useEffect from reconnecting on
-  // every unrelated re-render.
+  // Fetch TURN/STUN servers from the backend (sourced from PIPECAT_ICE_SERVERS).
+  // Without these the browser creates RTCPeerConnection({iceServers:[]}) — only
+  // host candidates (private IPs), unreachable from Render.
+  useEffect(() => {
+    fetch(`${BOT_URL}/ice-servers`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+          setIceServers(data.iceServers);
+        }
+      })
+      .catch(() => {}); // no-op — falls back to empty (same as before)
+  }, []);
+
+  // Stable reference — all hooks above the early return, deps explicit.
   const connectParams = useMemo(
     () => ({
+      iceConfig: iceServers.length > 0 ? { iceServers } : undefined,
       webrtcRequestParams: {
         endpoint: `${BOT_URL}/api/offer`,
         requestData: { language, department },
       },
     }),
-    [language, department],
+    [language, department, iceServers],
   );
 
   if (!department || !language) {
