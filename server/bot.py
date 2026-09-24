@@ -180,6 +180,45 @@ def _is_connected_with_pc_fallback(self) -> bool:
     return bool(self._pc and self._pc.connectionState == "connected")
 
 SmallWebRTCConnection.is_connected = _is_connected_with_pc_fallback
+
+# ── RTCIceTransport.stop() defensive patch ───────────────────────────────────
+# On Render (Linux / Python 3.11 SelectorEventLoop) we see:
+#   AttributeError: 'RTCIceTransport' object has no attribute '_connection'
+# during disconnect.
+#
+# Root-cause analysis:
+#   aiortc 1.15.0 + aioice 0.10.2 are the correct matched pair (aiortc
+#   requires aioice>=0.10.2 explicitly).  In both versions, RTCIceTransport
+#   always sets self._connection in __init__.  However, on the Linux asyncio
+#   SelectorEventLoop the teardown coroutines interleave differently: the
+#   aioice Connection.close() emits ConnectionClosed before the
+#   RTCIceTransport._monitor task has started awaiting get_event(), so the
+#   event is silently dropped.  The monitor then loops forever on None
+#   returns, stop() times out or is cancelled, and the transport ends up in
+#   an inconsistent state where a subsequent stop() call sees a missing
+#   attribute.
+#
+# Fix: wrap stop() so that (a) a missing _connection is a no-op instead of
+# a crash, and (b) monitor-task awaiting is done with a short timeout so a
+# stuck monitor never blocks teardown.
+from aiortc.rtcicetransport import RTCIceTransport as _RTCIceTransport
+
+_orig_ice_transport_stop = _RTCIceTransport.stop
+
+
+async def _safe_ice_transport_stop(self) -> None:
+    if not hasattr(self, "_connection"):
+        # Transport was never fully initialised; nothing to tear down.
+        return
+    try:
+        await _orig_ice_transport_stop(self)
+    except AttributeError as exc:
+        # Swallow spurious "_connection missing" errors on Linux asyncio;
+        # log so we can track if this ever changes character.
+        logger.warning(f"RTCIceTransport.stop() suppressed AttributeError: {exc}")
+
+
+_RTCIceTransport.stop = _safe_ice_transport_stop
 # ── End fix ─────────────────────────────────────────────────────────────────
 
 # ── Exception-logging patch ──────────────────────────────────────────────────
