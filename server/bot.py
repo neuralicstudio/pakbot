@@ -278,6 +278,40 @@ async def _debug_handle_web_request(self, request, webrtc_connection_callback):
 SmallWebRTCRequestHandler.handle_web_request = _debug_handle_web_request
 # ── End exception-logging patch ──────────────────────────────────────────────
 
+# ── PATCH 404 race-condition fix ─────────────────────────────────────────────
+# Root cause: the voice-ui-kit's SmallWebRTC transport uses trickle ICE —
+# ICE candidates are sent via PATCH /api/offer as they are gathered.  During
+# reconnection the client's _canSendIceCandidates flag is still true from the
+# previous successful negotiation and is NOT reset before the new negotiate()
+# call.  The 200ms flush timer can therefore fire a PATCH (carrying the OLD
+# pc_id) before the POST response arrives with the new pc_id.
+#
+# Meanwhile the server's disconnect handler has already popped the old pc_id
+# from _pcs_map, so the PATCH hits a 404, which the client treats as a hard
+# error — potentially aborting the reconnection attempt entirely.
+#
+# Fix: if the pc_id isn't in _pcs_map, log a warning and return gracefully
+# instead of raising HTTP 404.  The candidates in a stale PATCH belong to a
+# dead ICE session and are harmless to discard; the new connection will get
+# its own PATCH once the POST response assigns the fresh pc_id.
+_orig_handle_patch_request = SmallWebRTCRequestHandler.handle_patch_request
+
+
+async def _graceful_handle_patch_request(self, request):
+    peer_connection = self._pcs_map.get(request.pc_id)
+    if not peer_connection:
+        logger.warning(
+            f"PATCH for unknown pc_id {request.pc_id} — likely a stale "
+            f"trickle-ICE request during reconnection; ignoring "
+            f"(active pc_ids: {list(self._pcs_map.keys())})"
+        )
+        return
+    return await _orig_handle_patch_request(self, request)
+
+
+SmallWebRTCRequestHandler.handle_patch_request = _graceful_handle_patch_request
+# ── End PATCH 404 fix ────────────────────────────────────────────────────────
+
 # Fish Audio: Urdu voice, verified via live testing.
 FISH_MODEL = "s2.1-pro-free"
 FISH_URDU_VOICE_ID = "1a915c8fa83c43f49b2cf41f83319cb3"
