@@ -52,6 +52,19 @@ export default function App() {
   const [department, setDepartment] = useState<Department | null>(null);
   const [language, setLanguage] = useState<Language | null>(null);
 
+  // Declared before any early return so hook call order is always the same.
+  // Stable reference prevents PipecatAppBase's useEffect from reconnecting on
+  // every unrelated re-render.
+  const connectParams = useMemo(
+    () => ({
+      webrtcRequestParams: {
+        endpoint: `${BOT_URL}/api/offer`,
+        requestData: { language, department },
+      },
+    }),
+    [language, department],
+  );
+
   if (!department || !language) {
     return (
       <div className="picker-wrap">
@@ -99,18 +112,6 @@ export default function App() {
       </div>
     );
   }
-
-  // Stable reference — a new object identity on every render would trigger
-  // PipecatAppBase's useEffect to reconnect unnecessarily.
-  const connectParams = useMemo(
-    () => ({
-      webrtcRequestParams: {
-        endpoint: `${BOT_URL}/api/offer`,
-        requestData: { language, department },
-      },
-    }),
-    [language, department],
-  );
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="pakbot-theme">
