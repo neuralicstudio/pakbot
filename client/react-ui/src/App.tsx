@@ -59,9 +59,12 @@ export default function App() {
   // host candidates (private IPs), unreachable from Render.
   useEffect(() => {
     fetch(`${BOT_URL}/ice-servers`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) return undefined;
+        return r.json();
+      })
       .then((data) => {
-        if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+        if (data && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
           setIceServers(data.iceServers);
         }
       })
@@ -69,9 +72,11 @@ export default function App() {
   }, []);
 
   // Stable reference — all hooks above the early return, deps explicit.
+  // Always pass a well-formed iceConfig (never undefined) so voice-ui-kit
+  // can safely access .iceServers without optional-chaining in every path.
   const connectParams = useMemo(
     () => ({
-      iceConfig: iceServers.length > 0 ? { iceServers } : undefined,
+      iceConfig: { iceServers },
       webrtcRequestParams: {
         endpoint: `${BOT_URL}/api/offer`,
         requestData: { language, department },
