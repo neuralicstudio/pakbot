@@ -53,16 +53,12 @@ from loguru import logger
 from openai import AsyncOpenAI
 from websockets.asyncio.client import connect as ws_connect
 
-# aiortc/aioice (the WebRTC library under SmallWebRTCTransport) log via the
-# stdlib `logging` module, which loguru does not intercept -- so we've had
-# zero visibility into their internal ICE/DTLS/SRTP diagnostics. Surfacing
-# them here to find the real cause behind the "Media stream error while
-# reading the audio" failures, which happen at a consistent ~90-100s mark
-# regardless of conversation content (not explained by anything in
-# Pipecat's own SmallWebRTC transport, which has no timer in that range).
+# aiortc/aioice log via the stdlib `logging` module.  DEBUG was useful for
+# diagnosing the ICE/DTLS failures fixed in ef8afcd & 111eb02 but generates
+# 100+ lines/sec during active audio (per-RTP-packet, SCTP, consent checks).
+# On Render that volume saturates the log pipe → blocks the event loop →
+# health-check failures → automatic instance restart (silent cutoff).
 logging.basicConfig(level=logging.WARNING)
-logging.getLogger("aiortc").setLevel(logging.DEBUG)
-logging.getLogger("aioice").setLevel(logging.DEBUG)
 
 from persona import PRESETS, DepartmentPersona
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -1436,6 +1432,7 @@ async def run_bot(
             enable_usage_metrics=True,
         ),
         observers=[],
+        idle_timeout_secs=600,  # 10 min (default 5 min is too short for slow callers)
     )
 
     @worker.rtvi.event_handler("on_client_ready")
