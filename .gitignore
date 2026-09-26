@@ -220,7 +220,11 @@ __marimo__/
 *.debug.log
 
 # Node.js (client/)
-
 node_modules/
 dist/
 build/
+
+# Local test distribution (contains API keys)
+local-test/
+pakbot-local-test.zip
+server/static/

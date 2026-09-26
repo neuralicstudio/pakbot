@@ -47,6 +47,7 @@ import math
 import os
 import re
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -97,7 +98,8 @@ from pipecat.runner.utils import create_transport
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse
+from starlette.staticfiles import StaticFiles
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.responses.llm import OpenAIResponsesLLMService
@@ -168,6 +170,16 @@ async def ice_servers():
     except (json.JSONDecodeError, TypeError):
         servers = []
     return JSONResponse({"iceServers": servers})
+
+
+# ── Serve the built React frontend (for local testing) ────────────────────
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    _pipecat_app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="static")
+
+    @_pipecat_app.get("/")
+    async def index():
+        return FileResponse(_static_dir / "index.html")
 
 
 # ── SmallWebRTC race-condition fix ──────────────────────────────────────────
