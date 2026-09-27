@@ -17,7 +17,7 @@ STT:
            (turn_detection=False; Silero VAD in the pipeline drives turns)
            (OPENAI_API_KEY)
 
-LLM: OpenAIResponsesLLMService, gpt-4o, persona-driven system prompt
+LLM: OpenAIResponsesLLMService, gpt-4o-2024-11-20, persona-driven system prompt
      (OPENAI_API_KEY)
 
 TTS: Fish Audio primary (Urdu only, voice-tested), Cartesia fallback
@@ -51,7 +51,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from loguru import logger
-from openai import AsyncOpenAI
 from websockets.asyncio.client import connect as ws_connect
 
 # aiortc/aioice log via the stdlib `logging` module.  DEBUG was useful for
@@ -61,11 +60,10 @@ from websockets.asyncio.client import connect as ws_connect
 # health-check failures → automatic instance restart (silent cutoff).
 logging.basicConfig(level=logging.WARNING)
 
-from persona import PRESETS, DepartmentPersona
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.turns.user_start import VADUserTurnStartStrategy
-from pipecat.turns.user_turn_strategies import UserTurnStrategies
+from pipecat.classifiers.base_classifier import YesNoQuestion
+from pipecat.classifiers.llm.classifier import LLMClassifier
 from pipecat.frames.frames import (
     AudioRawFrame,
     BotStartedSpeakingFrame,
@@ -73,11 +71,12 @@ from pipecat.frames.frames import (
     EndFrame,
     EndWorkerFrame,
     Frame,
+    InterimTranscriptionFrame,
     LLMContextFrame,
     LLMMessagesAppendFrame,
     ManuallySwitchServiceFrame,
-    STTMuteFrame,
     StartFrame,
+    STTMuteFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
     VADUserStartedSpeakingFrame,
@@ -88,6 +87,7 @@ from pipecat.pipeline.service_switcher import ServiceSwitcher, ServiceSwitcherSt
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
+    EmptyUserTurnConfig,
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
@@ -96,19 +96,24 @@ from pipecat.runner.run import app as _pipecat_app
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.cartesia.tts import CartesiaTTSService
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import FileResponse, JSONResponse
-from starlette.staticfiles import StaticFiles
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.responses.llm import OpenAIResponsesLLMService
 from pipecat.services.openai.stt import OpenAIRealtimeSTTService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.speechmatics.stt import SpeechmaticsSTTService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+from pipecat.turns.user_start import VADUserTurnStartStrategy
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import FileResponse, JSONResponse
+from starlette.staticfiles import StaticFiles
+
+from persona import PRESETS, DepartmentPersona
 
 load_dotenv(override=True)
 
@@ -330,6 +335,13 @@ CARTESIA_MODEL = "sonic-3.6"
 CARTESIA_URDU_VOICE_ID = "66d882f5-3076-4b4c-a30f-e1db8b01ed6b"
 CARTESIA_ENGLISH_VOICE_ID = os.getenv("CARTESIA_VOICE_ID") or "86e30c1d-714b-4074-a1f2-1cb6b552fb49"
 
+# IPA pronunciation corrections for words Cartesia mispronounces.
+# Registered as a text_transform (last, so no later transform rewrites
+# the inline phoneme markup Cartesia expects).
+_BISP_PRONUNCIATIONS = CartesiaTTSService.pronunciation_transform_ipa({
+    "Benazir": "bɛˈnaːzɪr",
+})
+
 FISH_WS_URL = "wss://api.fish.audio/v1/tts/live"
 FISH_HEALTH_CHECK_TIMEOUT = 5.0
 
@@ -402,6 +414,7 @@ def build_english_tts():
             voice=CARTESIA_ENGLISH_VOICE_ID,
             language=Language.EN,
         ),
+        text_transforms=[("*", _BISP_PRONUNCIATIONS)],
     )
 
 
@@ -414,6 +427,7 @@ def build_cartesia_urdu_tts():
             voice=CARTESIA_URDU_VOICE_ID,
             language=Language.UR,
         ),
+        text_transforms=[("*", _BISP_PRONUNCIATIONS)],
     )
 
 
@@ -491,8 +505,8 @@ class AudioLevelDiagnostics(FrameProcessor):
     garbling issue (repeated-token hallucination, e.g. "ایکس ایکس ایکس...").
     Root-cause research (2026-09-11) found: (a) no documented Speechmatics
     bug matching this symptom, (b) our config already matches Speechmatics'
-    own recommendations (the EXTERNAL turn-detection preset already defaults
-    to OperatingPoint.ENHANCED), and (c) a third-party benchmark measured
+    own recommendations (EXTERNAL turn-detection mode with the default
+    linden-1 model), and (c) a third-party benchmark measured
     Speechmatics at 33.9% WER on real-world Urdu audio (vs. its much
     stronger English performance) -- consistent with a weaker acoustic
     model being more prone to the well-documented general ASR failure mode
@@ -944,8 +958,6 @@ class ClosingIntentInjector(FrameProcessor):
             )
 
 
-SCOPE_GATE_MODEL = "gpt-4o-mini"
-
 _SCOPE_GATE_SYSTEM_PROMPT = """You are a strict scope classifier for a Pakistani government helpline voice bot. Your ONLY job is to decide whether the caller's message is plausibly related to the helpline's stated scope, or clearly unrelated. You are not the helpline agent -- do not answer the message, just classify it.
 
 Helpline: {department_name}
@@ -974,6 +986,171 @@ _SCOPE_GATE_FINAL_REDIRECT = {
 # if they ask one real question between attempts.  Matches the persona's
 # "TWO OR MORE times after you've already redirected them once" rule.
 _SCOPE_GATE_MAX_OFFTOPIC = 3
+
+# Minimum word count before PredictiveWarmup fires a background classification.
+_WARMUP_MIN_WORDS = 4
+
+
+class _WarmupCache:
+    """Pre-classification result from an interim (partial) transcript.
+
+    Written by PredictiveWarmup (background task on partials), read by
+    ScopeGate (when the final transcript arrives).  Both run in the same
+    asyncio event loop so no lock is needed.
+    """
+
+    __slots__ = ("text", "in_scope", "probability", "ready")
+
+    def __init__(self):
+        self.text: str = ""
+        self.in_scope: bool = True
+        self.probability: float = 0.0
+        self.ready: bool = False
+
+    def set(self, text: str, in_scope: bool, probability: float):
+        self.text = text
+        self.in_scope = in_scope
+        self.probability = probability
+        self.ready = True
+
+    def reset(self):
+        self.text = ""
+        self.in_scope = True
+        self.probability = 0.0
+        self.ready = False
+
+
+def _warmup_text_matches(cached: str, final: str) -> bool:
+    """True when the cached partial is close enough to the final transcript.
+
+    The partial is typically a prefix of the final (the user kept speaking
+    after the partial was captured).  We accept the cache when:
+    - the normalized final starts with the normalized partial, AND
+    - the partial covers at least 40 % of the final (not a trivial prefix
+      that could mean anything).
+    """
+    c = " ".join(cached.casefold().split())
+    f = " ".join(final.casefold().split())
+    return f.startswith(c) and len(c) >= len(f) * 0.4
+
+
+class PredictiveWarmup(FrameProcessor):
+    """Pre-warms pipeline resources using interim (partial) STT transcripts.
+
+    Monitors ``InterimTranscriptionFrame`` and, once enough text accumulates
+    (``_WARMUP_MIN_WORDS``), fires a background Jev classification whose
+    result ``ScopeGate`` can reuse instead of making its own call — saving
+    the ~100 ms Jev round-trip on every in-scope turn.
+
+    Also detects language from partials and pre-connects Fish Audio TTS
+    when Urdu is predicted, saving the lazy-connect latency on first use.
+
+    **Safety invariant:** passes all frames through unchanged.  Never
+    modifies, blocks, or generates response content — only warms caches
+    and connections.
+    """
+
+    def __init__(
+        self,
+        cache: _WarmupCache,
+        classifier: LLMClassifier,
+        scope_instructions: str,
+        context: LLMContext,
+        fish_tts: "LazyFishAudioTTSService | None" = None,
+    ):
+        super().__init__()
+        self._cache = cache
+        self._classifier = classifier
+        self._scope_instructions = scope_instructions
+        self._context = context
+        self._fish_tts = fish_tts
+        self._classify_task: asyncio.Task | None = None
+        self._fish_preconnect_done = False
+        self._partial_fired = False  # True once we fire classification for this turn
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, InterimTranscriptionFrame):
+            text = frame.text.strip()
+            if text and not self._partial_fired:
+                words = text.split()
+                if len(words) >= _WARMUP_MIN_WORDS:
+                    # Skip garbled partials — same filter as GarbledTranscriptFilter.
+                    cleaned = _clean_garbled_transcript(text)
+                    if cleaned is not None:
+                        self._partial_fired = True
+                        self._classify_task = self.create_task(
+                            self._background_classify(cleaned),
+                            f"{self}::classify",
+                        )
+                        # Pre-connect Fish Audio on first Urdu detection.
+                        if (
+                            self._fish_tts is not None
+                            and not self._fish_preconnect_done
+                            and self._fish_tts._websocket is None
+                            and LanguageHintInjector._detect_language(text) == "Urdu"
+                        ):
+                            self._fish_preconnect_done = True
+                            self.create_task(
+                                self._preconnect_fish(),
+                                f"{self}::fish_preconnect",
+                            )
+
+        elif isinstance(frame, TranscriptionFrame):
+            # Final transcript for this turn — reset for the next turn.
+            self._partial_fired = False
+            if self._classify_task and not self._classify_task.done():
+                await self.cancel_task(self._classify_task)
+                self._classify_task = None
+
+        await self.push_frame(frame, direction)
+
+    def _last_assistant_text(self) -> str | None:
+        """Last assistant turn with real spoken text (same logic as ScopeGate)."""
+        for message in reversed(self._context.messages):
+            if message.get("role") == "assistant":
+                content = message.get("content")
+                if isinstance(content, str) and content.strip():
+                    return content
+        return None
+
+    async def _background_classify(self, text: str):
+        """Run Jev classification on the partial and store in the cache."""
+        try:
+            t0 = time.monotonic()
+            # Build the same state string ScopeGate._classify() would use, so
+            # the classification result is directly reusable.
+            last_assistant = self._last_assistant_text()
+            if last_assistant:
+                state = f"[Previous assistant response: {last_assistant}]\n\nCaller: {text}"
+            else:
+                state = text
+
+            results = await self._classifier.yes_no(
+                state,
+                {"in_scope": YesNoQuestion(instructions=self._scope_instructions)},
+            )
+            result = results["in_scope"]
+            dt_ms = (time.monotonic() - t0) * 1000
+            self._cache.set(text, result.is_yes, result.probability)
+            logger.debug(
+                f"PredictiveWarmup: pre-classified "
+                f"{'IN_SCOPE' if result.is_yes else 'OFF_TOPIC'} "
+                f"(p={result.probability:.2f}, {dt_ms:.0f}ms): {text!r}"
+            )
+        except Exception as e:
+            logger.debug(f"PredictiveWarmup: background classify failed (harmless): {e}")
+
+    async def _preconnect_fish(self):
+        """Trigger Fish Audio lazy WebSocket connection early."""
+        try:
+            t0 = time.monotonic()
+            await self._fish_tts._connect()
+            dt_ms = (time.monotonic() - t0) * 1000
+            logger.info(f"PredictiveWarmup: Fish Audio pre-connected ({dt_ms:.0f}ms)")
+        except Exception as e:
+            logger.debug(f"PredictiveWarmup: Fish pre-connect failed (harmless): {e}")
 
 
 class ScopeGate(FrameProcessor):
@@ -1007,7 +1184,8 @@ class ScopeGate(FrameProcessor):
     once per turn, the same unit of text the persona LLM would have seen.
 
     The fix is architectural, not more prompt wording: a small, stateless,
-    single-purpose classifier call (gpt-4o-mini) that has NO conversation
+    single-purpose classifier call (gpt-5.4-nano via OpenAI,
+    using Pipecat's LLMClassifier) that has NO conversation
     history to drift against -- it only ever sees the current message plus
     the department's scope definition, so it cannot suffer the same
     self-reinforcement failure. If it classifies a message as off-topic,
@@ -1039,10 +1217,12 @@ class ScopeGate(FrameProcessor):
         context: LLMContext,
         tts_router: TTSRouter,
         garbled_filter: GarbledTranscriptFilter | None = None,
+        warmup_cache: _WarmupCache | None = None,
     ):
         super().__init__()
         self._persona = persona
         self._garbled_filter = garbled_filter
+        self._warmup_cache = warmup_cache
         # Read-only access to the same LLMContext the LLM/aggregators use, so
         # the classifier can resolve a pronoun-ambiguous follow-up ("how do I
         # access IT on the website?") against the assistant's immediately
@@ -1058,13 +1238,18 @@ class ScopeGate(FrameProcessor):
         self._last_classified_text: str | None = None
         self._off_topic_count = 0
         self._ending = False  # set True once farewell is spoken; blocks all subsequent LLM turns
-        self._client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         services_block = "\n".join(f"- {s}" for s in persona.services)
         program_knowledge_block = f"\n{persona.program_knowledge}\n" if persona.program_knowledge else ""
-        self._system_prompt = _SCOPE_GATE_SYSTEM_PROMPT.format(
+        self._scope_instructions = _SCOPE_GATE_SYSTEM_PROMPT.format(
             department_name=persona.department_name,
             services_block=services_block,
             program_knowledge_block=program_knowledge_block,
+        )
+        self._classifier = LLMClassifier(
+            llm=OpenAILLMService(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                settings=OpenAILLMService.Settings(model="gpt-5.4-nano"),
+            ),
         )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -1176,21 +1361,59 @@ class ScopeGate(FrameProcessor):
         occasional off-topic slip getting through to the persona LLM's own
         (weaker, but still present) scope-boundary rule as a fallback.
         """
+        # Check PredictiveWarmup cache before making a fresh Jev call.
+        if self._warmup_cache and self._warmup_cache.ready:
+            cached_text = self._warmup_cache.text
+            cached_result = self._warmup_cache.in_scope
+            cached_prob = self._warmup_cache.probability
+            self._warmup_cache.reset()  # consume — one use per turn
+            if _warmup_text_matches(cached_text, text):
+                # Safety guard: a partial like "what is your favorite" is
+                # ambiguous — it classified as IN_SCOPE, but the final
+                # "what is your favorite color" should be OFF_TOPIC.
+                # Cached IN_SCOPE is always safe (worst case: off-topic slips
+                # through to the persona LLM's own scope rule).
+                # Cached OFF_TOPIC on a partial that covers <70% of the final
+                # is risky (the remaining words might make it in-scope), so
+                # we re-classify to be sure.
+                c_len = len(" ".join(cached_text.casefold().split()))
+                f_len = len(" ".join(text.casefold().split()))
+                if cached_result or (f_len > 0 and c_len / f_len >= 0.7):
+                    logger.info(
+                        f"ScopeGate: using pre-warmed classification "
+                        f"{'IN_SCOPE' if cached_result else 'OFF_TOPIC'} "
+                        f"(p={cached_prob:.2f}, saved Jev call)"
+                    )
+                    return cached_result
+                else:
+                    logger.debug(
+                        f"ScopeGate: cached OFF_TOPIC on short partial "
+                        f"({c_len}/{f_len} chars), re-classifying for safety"
+                    )
+            else:
+                logger.debug(
+                    f"ScopeGate: pre-warmed text diverged, re-classifying "
+                    f"(cached {len(cached_text)} chars, final {len(text)} chars)"
+                )
+
         try:
-            messages = [{"role": "system", "content": self._system_prompt}]
+            t0 = time.monotonic()
             last_assistant_text = self._last_assistant_text()
             if last_assistant_text:
-                messages.append({"role": "assistant", "content": last_assistant_text})
-            messages.append({"role": "user", "content": text})
-
-            response = await self._client.chat.completions.create(
-                model=SCOPE_GATE_MODEL,
-                temperature=0,
-                max_tokens=5,
-                messages=messages,
+                state = f"[Previous assistant response: {last_assistant_text}]\n\nCaller: {text}"
+            else:
+                state = text
+            results = await self._classifier.yes_no(
+                state,
+                {"in_scope": YesNoQuestion(instructions=self._scope_instructions)},
             )
-            verdict = (response.choices[0].message.content or "").strip().upper()
-            return "OFF_TOPIC" not in verdict
+            result = results["in_scope"]
+            dt_ms = (time.monotonic() - t0) * 1000
+            logger.debug(
+                f"ScopeGate: classified {'IN_SCOPE' if result.is_yes else 'OFF_TOPIC'} "
+                f"(probability={result.probability:.2f}, {dt_ms:.0f}ms, no cache hit)"
+            )
+            return result.is_yes
         except Exception as e:
             logger.warning(f"ScopeGate: classification call failed, defaulting to in-scope: {e}")
             return True
@@ -1392,7 +1615,7 @@ async def run_bot(
     llm = OpenAIResponsesLLMService(
         api_key=os.getenv("OPENAI_API_KEY"),
         settings=OpenAIResponsesLLMService.Settings(
-            model="gpt-4o",
+            model="gpt-4o-2024-11-20",
             system_instruction=persona.system_prompt(language),
         ),
     )
@@ -1412,22 +1635,51 @@ async def run_bot(
             user_turn_strategies=UserTurnStrategies(
                 start=[VADUserTurnStartStrategy()],
             ),
+            empty_user_turn=EmptyUserTurnConfig(
+                idle_prompt=(
+                    "The caller said something but it was not recognized by "
+                    "transcription. Ask them to please repeat what they said, "
+                    "briefly and politely, in the same language as the "
+                    "conversation so far."
+                ),
+                # interrupted_prompt: default handles bot-interrupted case
+                # max_consecutive_recoveries=1: default, won't loop forever
+            ),
         ),
     )
 
     # Pipeline - assembled from reusable components
     garbled_filter = GarbledTranscriptFilter()
+    warmup_cache = _WarmupCache()
+    scope_gate = ScopeGate(
+        persona, context, tts_router,
+        garbled_filter=garbled_filter,
+        warmup_cache=warmup_cache,
+    )
+    predictive_warmup = PredictiveWarmup(
+        cache=warmup_cache,
+        classifier=LLMClassifier(
+            llm=OpenAILLMService(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                settings=OpenAILLMService.Settings(model="gpt-5.4-nano"),
+            ),
+        ),
+        scope_instructions=scope_gate._scope_instructions,
+        context=context,
+        fish_tts=tts_fish_urdu if isinstance(tts_fish_urdu, LazyFishAudioTTSService) else None,
+    )
     pipeline = Pipeline(
         [
             transport.input(),
             AudioLevelDiagnostics(),
             stt,
             EchoSuppressor(startup_mute=isinstance(stt, SpeechmaticsSTTService)),
+            predictive_warmup,
             garbled_filter,
             LanguageHintInjector(tts_router),
             ClosingIntentInjector(),
             user_aggregator,
-            ScopeGate(persona, context, tts_router, garbled_filter=garbled_filter),
+            scope_gate,
             llm,
             EndFrameTracer("pre-switcher"),
             tts_switcher,
