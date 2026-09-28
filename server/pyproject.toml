@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Voice AI bot built with Pipecat"
 requires-python = ">=3.11"
 dependencies = [
-    "pipecat-ai[cartesia,fish,openai,runner,silero,speechmatics,webrtc]>=1.4.0",
+    "pipecat-ai[cartesia,fish,openai,openrouter,runner,silero,speechmatics,webrtc]>=1.12.0",
     "pipecatcloud",
     "aiortc==1.15.0",
     "aioice==0.10.2",
@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "psutil>=7.2.2",
     "pyright>=1.1.404,<2",
     "ruff>=0.12.11,<1",
 ]
