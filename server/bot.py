@@ -1579,6 +1579,44 @@ async def end_call(params: FunctionCallParams):
     logger.info("end_call: EndWorkerFrame pushed")
 
 
+async def _session_warmup(
+    scope_gate: "ScopeGate",
+    predictive_warmup: "PredictiveWarmup",
+) -> None:
+    """Warm the gpt-5.4-nano classifier HTTP connections at session start.
+
+    Fires a throwaway classification through both the ScopeGate and
+    PredictiveWarmup classifiers so the OpenAI TCP connection and model
+    response cache are hot before the caller's first turn.  Without this,
+    the first classification of a session takes ~7s (TLS + model cold
+    start); subsequent calls take 0.9-2.4s.
+
+    Runs as a fire-and-forget asyncio task started from on_client_connected,
+    so it runs concurrently with the greeting — never blocking it, never
+    writing to context, never touching the off-topic counter.  Errors are
+    logged and discarded.
+    """
+    _WARMUP_TEXT = "BISP payment kab aayegi"  # trivially in-scope; result is discarded
+
+    async def _warm_classifier(label: str, clf: LLMClassifier) -> None:
+        try:
+            t0 = time.monotonic()
+            await clf.yes_no(
+                _WARMUP_TEXT,
+                {"in_scope": YesNoQuestion(instructions=scope_gate._scope_instructions)},
+            )
+            dt_ms = (time.monotonic() - t0) * 1000
+            logger.info(f"Session warmup: {label} ready in {dt_ms:.0f}ms")
+        except Exception as e:
+            logger.info(f"Session warmup: {label} error (harmless): {e}")
+
+    await asyncio.gather(
+        _warm_classifier("ScopeGate classifier", scope_gate._classifier),
+        _warm_classifier("PredictiveWarmup classifier", predictive_warmup._classifier),
+        return_exceptions=True,
+    )
+
+
 async def run_bot(
     transport: BaseTransport,
     runner_args: RunnerArguments,
@@ -1734,6 +1772,10 @@ async def run_bot(
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info("Client connected")
+        asyncio.create_task(
+            _session_warmup(scope_gate, predictive_warmup),
+            name="session_warmup",
+        )
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
