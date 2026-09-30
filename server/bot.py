@@ -972,12 +972,12 @@ Respond with ONLY a single word: IN_SCOPE or OFF_TOPIC."""
 
 _SCOPE_GATE_REDIRECT = {
     "English": "I'm sorry, I can only help with questions related to the {department_name}. Is there anything about that I can help you with?",
-    "Urdu": "معذرت، میں صرف {department_name} سے متعلق سوالات میں مدد کر سکتی ہوں۔ کیا اس بارے میں میں آپ کی کوئی مدد کر سکتی ہوں؟",
+    "Urdu": "معذرت، میں صرف {department_name} سے متعلق سوالات میں مدد کر سکتا ہوں۔ کیا اس بارے میں میں آپ کی کوئی مدد کر سکتا ہوں؟",
 }
 
 _SCOPE_GATE_FINAL_REDIRECT = {
     "English": "Since this doesn't seem related to what I can help with, I'll end the call here. Thank you for calling.",
-    "Urdu": "چونکہ یہ میری مدد کے دائرے سے باہر ہے، میں اب کال ختم کر رہی ہوں۔ کال کرنے کا شکریہ۔",
+    "Urdu": "چونکہ یہ میری مدد کے دائرے سے باہر ہے، میں اب کال ختم کر رہا ہوں۔ کال کرنے کا شکریہ۔",
 }
 
 # After this many total off-topic blocks in a session, end the call instead
